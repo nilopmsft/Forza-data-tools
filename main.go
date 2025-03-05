@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"flag"
 	"fmt"
@@ -11,7 +12,6 @@ import (
 
 	// "time"
 	// "strconv"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"strings"
@@ -19,7 +19,10 @@ import (
 
 	// "encoding/csv"
 	// "sort"
+	"context"
 	"encoding/json"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs"
 )
 
 const hostname = "0.0.0.0"            // Address to listen on (0.0.0.0 = all interfaces)
@@ -27,6 +30,9 @@ const port = "9999"                   // UDP Port number to listen on
 const service = hostname + ":" + port // Combined hostname+port
 
 var jsonData string // Stores the JSON data to be sent out via the web server if enabled
+
+var eventData []*azeventhubs.EventData         // Stores the Event Hub data to be sent out if enabled
+var producerClient *azeventhubs.ProducerClient // Event Hub client
 
 // Telemetry struct represents a piece of telemetry as defined in the Forza data format (see the .dat files)
 type Telemetry struct {
@@ -46,7 +52,7 @@ func readForzaData(conn *net.UDPConn, telemArray []Telemetry, csvFile string) {
 		log.Fatal("Error reading UDP data:", err, addr)
 	}
 
-	if isFlagPassed("d") == true { // Print extra connection info if debugMode set
+	if isFlagPassed("d") { // Print extra connection info if debugMode set
 		log.Println("UDP client connected:", addr)
 		// fmt.Printf("Raw Data from UDP client:\n%s", string(buffer[:n])) // Debug: Dump entire received buffer
 	}
@@ -68,7 +74,7 @@ func readForzaData(conn *net.UDPConn, telemArray []Telemetry, csvFile string) {
 	for i, T := range telemArray {
 		data := buffer[:n][T.startOffset:T.endOffset] // Process received data in chunks based on byte offsets
 
-		if isFlagPassed("d") == true { // if debugMode, print received data in each chunk
+		if isFlagPassed("d") { // if debugMode, print received data in each chunk
 			log.Printf("Data chunk %d: %v (%s) (%s)", i, data, T.name, T.dataType)
 		}
 
@@ -101,7 +107,7 @@ func readForzaData(conn *net.UDPConn, telemArray []Telemetry, csvFile string) {
 	}
 
 	// Print received data to terminal (if not in quiet mode):
-	if isFlagPassed("q") == false {
+	if !isFlagPassed("q") {
 		// Convert slip values to ints as the precision of a float means a neutral state is rarely reported
 		totalSlipRear := int(f32map["TireCombinedSlipRearLeft"] + f32map["TireCombinedSlipRearRight"])
 		totalSlipFront := int(f32map["TireCombinedSlipFrontLeft"] + f32map["TireCombinedSlipFrontRight"])
@@ -130,7 +136,7 @@ func readForzaData(conn *net.UDPConn, telemArray []Telemetry, csvFile string) {
 	}
 
 	// Write data to CSV file if enabled:
-	if isFlagPassed("c") == true {
+	if isFlagPassed("c") {
 		file, err := os.OpenFile(csvFile, os.O_WRONLY|os.O_APPEND, 0644)
 		check(err)
 		defer file.Close()
@@ -162,10 +168,11 @@ func readForzaData(conn *net.UDPConn, telemArray []Telemetry, csvFile string) {
 	} // end of if CSV enabled
 
 	// Send data to JSON server if enabled:
-	if isFlagPassed("j") == true {
+	if isFlagPassed("j") {
 		var jsonArray [][]byte
 
 		s32json, _ := json.Marshal(s32map)
+
 		jsonArray = append(jsonArray, s32json)
 
 		u32json, _ := json.Marshal(u32map)
@@ -196,6 +203,45 @@ func readForzaData(conn *net.UDPConn, telemArray []Telemetry, csvFile string) {
 		jsonData = fmt.Sprintf("%s", jd)
 
 	} // end of if jsonEnabled
+
+	if isFlagPassed("e") {
+		// Send data to Azure Event Hub
+		// sendDataToEventHub()
+		var dataOutput bytes.Buffer
+
+		s32json, _ := json.Marshal(s32map)
+		dataOutput.Write(s32json[:len(s32json)-1])
+
+		u32json, _ := json.Marshal(u32map)
+		dataOutput.WriteString(",")
+		dataOutput.Write(u32json[1 : len(u32json)-1])
+
+		f32json, _ := json.Marshal(f32map)
+		dataOutput.WriteString(",")
+		dataOutput.Write(f32json[1 : len(f32json)-1])
+
+		u16json, _ := json.Marshal(u16map)
+		dataOutput.WriteString(",")
+		dataOutput.Write(u16json[1 : len(u16json)-1])
+
+		u8json, _ := json.Marshal(u8map)
+		dataOutput.WriteString(",")
+		dataOutput.Write(u8json[1 : len(u8json)-1])
+
+		s8json, _ := json.Marshal(s8map)
+		dataOutput.WriteString(",")
+		dataOutput.Write(s8json[1:])
+
+		log.Println(dataOutput.String())
+
+		eventData = append(eventData, &azeventhubs.EventData{
+			Body: dataOutput.Bytes(),
+		})
+
+		if len(eventData) >= 10 {
+			sendDataToEventHub()
+		}
+	}
 }
 
 func main() {
@@ -203,12 +249,14 @@ func main() {
 	csvFilePtr := flag.String("c", "", "Log data to given file in CSV format")
 	horizonPTR := flag.Bool("z", false, "Enables Forza Horizon 4 support (Will default to Forza Motorsport if unset)")
 	jsonPTR := flag.Bool("j", false, "Enables JSON HTTP server on port 8080")
+	eventhubPTR := flag.Bool("e", false, "Enables Azure Event Hub support")
 	noTermPTR := flag.Bool("q", false, "Disables realtime terminal output if set")
 	debugModePTR := flag.Bool("d", false, "Enables extra debug information if set")
 	flag.Parse()
 	csvFile := *csvFilePtr
 	horizonMode := *horizonPTR
 	jsonEnabled := *jsonPTR
+	eventhubEnabled := *eventhubPTR
 	noTerm := *noTermPTR
 	debugMode := *debugModePTR
 
@@ -309,7 +357,7 @@ func main() {
 	log.Printf("Proccessed %d Telemetry types OK!", len(telemArray))
 
 	// Prepare CSV file if requested
-	if isFlagPassed("c") == true {
+	if isFlagPassed("c") {
 		log.Println("Logging data to", csvFile)
 
 		csvHeader := ""
@@ -317,7 +365,7 @@ func main() {
 			csvHeader += "," + T.name
 		}
 		csvHeader = csvHeader + "\n"
-		err := ioutil.WriteFile(csvFile, []byte(csvHeader)[1:], 0644)
+		err := os.WriteFile(csvFile, []byte(csvHeader)[1:], 0644)
 		check(err)
 	} else {
 		log.Println("CSV Logging disabled")
@@ -326,6 +374,19 @@ func main() {
 	// Start JSON server if requested
 	if jsonEnabled {
 		go serveJSON()
+	}
+
+	if eventhubEnabled {
+		value := os.Getenv("EVENTHUB_CONNECTION_STRING")
+		if value == "" {
+			log.Fatalf("EVENTHUB_CONNECTION_STRING is not set or is empty")
+		} else {
+			// Create a new Event Hub client
+			producerClient, err = azeventhubs.NewProducerClientFromConnectionString(value, "", nil)
+			if err != nil {
+				log.Fatalf("Failed to create Event Hub client: %s", err)
+			}
+		}
 	}
 
 	// Setup UDP listener
@@ -359,7 +420,7 @@ func SetupCloseHandler(csvFile string) {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		if isFlagPassed("c") == true { // Get stats if csv logging enabled
+		if isFlagPassed("c") { // Get stats if csv logging enabled
 			calcstats(csvFile)
 		}
 		fmt.Println("")
@@ -436,4 +497,33 @@ func CheckAttitude(totalSlipFront int, totalSlipRear int) string {
 		return "Neutral"
 	}
 
+}
+
+func sendDataToEventHub() {
+	// Create a new Event Hub producer
+	newBatchOptions := &azeventhubs.EventDataBatchOptions{}
+
+	batch, err := producerClient.NewEventDataBatch(context.TODO(), newBatchOptions)
+
+	if err != nil {
+		panic(err)
+	}
+
+	for i := 0; i < len(eventData); i++ {
+		err = batch.AddEventData(eventData[i], nil)
+
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	// send the batch of events to the event hub
+	err = producerClient.SendEventDataBatch(context.TODO(), batch, nil)
+
+	if err != nil {
+		panic(err)
+	}
+
+	// Clear the eventData slice
+	eventData = eventData[:0]
 }

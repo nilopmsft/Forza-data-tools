@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"sort"
+	"strconv"
 )
 
 func calcstats(csvFile string) {
@@ -70,7 +70,7 @@ func calculate(rows [][]string) [][]string {
 			speedRow = k
 		} else if v == "Boost" {
 			boostRow = k
-		} 
+		}
 	}
 
 	var s []float64 // array of speed values
@@ -95,14 +95,14 @@ func calculate(rows [][]string) [][]string {
 	}
 
 	var totalSpeed float64
-	for _, value:= range s {
+	for _, value := range s {
 		totalSpeed += value // add all speed values together for getting average later
 	}
 
 	fmt.Printf("\nRace statistics:\n")
 
 	// Get average speed
-	fmt.Printf("Average speed: %.2f MPH \n", totalSpeed/float64(len(s)))  // truncate to 2 decimal places
+	fmt.Printf("Average speed: %.2f MPH \n", totalSpeed/float64(len(s))) // truncate to 2 decimal places
 
 	// Get top speed
 	// fmt.Println(s)
