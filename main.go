@@ -34,6 +34,8 @@ var jsonData string // Stores the JSON data to be sent out via the web server if
 var eventData []*azeventhubs.EventData         // Stores the Event Hub data to be sent out if enabled
 var producerClient *azeventhubs.ProducerClient // Event Hub client
 
+var username = "none" // Username to add to EventHub output
+
 // Telemetry struct represents a piece of telemetry as defined in the Forza data format (see the .dat files)
 type Telemetry struct {
 	position    int
@@ -230,9 +232,14 @@ func readForzaData(conn *net.UDPConn, telemArray []Telemetry, csvFile string) {
 
 		s8json, _ := json.Marshal(s8map)
 		dataOutput.WriteString(",")
-		dataOutput.Write(s8json[1:])
+		dataOutput.Write(s8json[1 : len(s8json)-1])
 
-		log.Println(dataOutput.String())
+		// Add username to the data
+		dataOutput.WriteString(",\"username\":\"" + username + "\"}")
+
+		if isFlagPassed("d") { // if debugMode, print received data in each chunk
+			log.Println(dataOutput.String())
+		}
 
 		eventData = append(eventData, &azeventhubs.EventData{
 			Body: dataOutput.Bytes(),
