@@ -269,6 +269,26 @@ func main() {
 
 	SetupCloseHandler(csvFile) // handle CTRL+C
 
+	_, debug_exists := os.LookupEnv("FDT_DEBUG")
+	_, quiet_exists := os.LookupEnv("FDT_QUIET")
+	username_value := os.Getenv("FDT_USERNAME")
+
+	debugMode = debugMode || debug_exists
+	if debug_exists {
+		flag.Set("d", "true")
+	}
+
+	noTerm = noTerm || quiet_exists
+
+	if quiet_exists {
+		flag.Set("q", "true")
+	}
+
+	// Set username based on environment variable
+	if username_value != "" {
+		username = username_value
+	}
+
 	if debugMode {
 		log.Println("Debug mode enabled")
 	}
