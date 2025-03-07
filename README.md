@@ -2,7 +2,23 @@
 Building some tools for playing with the UDP data out feature from the Forza Motorsport 7 / Forza Horizon 4 games. Built with [golang](https://golang.org/dl/).  
 
 
+## Using Docker
 
+docker run -e EVENTHUB_CONNECTION_STRING="YourEventHubConnectionStringwithNamespaceHere" -p 8080:8080 -p 9999:9999/udp forza-data-tools
+
+### Docker Options
+
+FDT_QUIET=y 
+
+This will surpress most output to docker
+
+FDT_DEBUG=y
+
+This will do the opposite and scream loudly at docker
+
+FDT_USERNAME=FreeformStringForUsernameTagging
+
+This will set the username value in the eventhub output, defaults to "none"
 
 ## Features
 - Realtime telemetry output to terminal  
