@@ -1,77 +1,78 @@
 # Forza data tools
-Building some tools for playing with the UDP data out feature from the Forza Motorsport 7 / Forza Horizon 4 games. Built with [golang](https://golang.org/dl/).  
 
+This tool is a fork of [https://github.com/richstokes/Forza-data-tools](https://github.com/richstokes/Forza-data-tools). It was updated to allow for docker deployment as well as Azure Event Hub integration.
 
-## Using Docker
-
-docker run -e EVENTHUB_CONNECTION_STRING="YourEventHubConnectionStringwithNamespaceHere" -p 8080:8080 -p 9999:9999/udp forza-data-tools
-
-### Docker Options
-
-FDT_QUIET=y 
-
-This will surpress most output to docker
-
-FDT_DEBUG=y
-
-This will do the opposite and scream loudly at docker
-
-FDT_USERNAME=FreeformStringForUsernameTagging
-
-This will set the username value in the eventhub output, defaults to "none"
+The tool was built with [golang](https://golang.org/dl/) for collecting the UDP data provided by modern Forza games.
 
 ## Features
-- Realtime telemetry output to terminal  
+- Realtime telemetry output to Azure Event Hub and terminal  
 - Telemetry data logging to csv file  
 - Serve Forza Telemetry data as JSON over HTTP
-- Display race statistics from race/drive (when logging to CSV)  
+- Display race statistics from race/drive (when logging to CSV)
+- Docker deployment method
 
+## Usage
 
+### Docker
 
-(Feel free to open an issue if you have any suggestions/feature requests)
-&nbsp;
+This tool can be run in a docker container, requiring at minimum a valid Azure Event Hub connection string.
 
-## Setup
-From your game HUD options, enable the data out feature and set it to use the IP address of your computer. Port 9999.  
+**Simple Run Example**
 
-Forza Motorsport 7 select the "car dash" format.
+`docker run -e EVENTHUB_CONNECTION_STRING="Endpoint://YourEventHubConnectionStringwithNamespaceAndSharedAccessKeyHere" -p 8080:8080 -p 9999:9999/udp ghcr.io/cbattlegear/forza-data-tools:latest`
 
-&nbsp;
+#### Environment Variables
 
-## Build
+| Feature                | Description                                      | Default Value | Required | Format |
+|------------------------|--------------------------------------------------|---------------|----------|--------|
+| `EVENTHUB_CONNECTION_STRING` | Full string to Azure Event Hub             | None          | True     | "Endpoint=sb://..." |
+| `FDT_QUIET`            | Suppresses most output to Docker                 | false         | False    | true |
+| `FDT_DEBUG`            | Enables verbose output, basically screams json   | false         | False    | true |
+| `FDT_USERNAME`         | Provides username value in the json output       | "none"        | False    | FreeFormString |
+
+#### Networking
+
+| Port | Description | Extra |
+|------|-------------|-------|
+| `9999/udp` | Telemetry capture port | |
+| `8080/tcp` | JSON server output port. | By default this is enabled but does not need to be mapped if not desired to be exposed.
+
+### Binary
+
+The application can be ran on baremetal but this fork was intended to be ran in docker with the inclusion of Azure Event Hub. This functionality is maintained but not recommended.
+
+#### Build
 Compile the application with: `go build -o fdt`  
 
-&nbsp;
+#### Run
 
-## Run
-### Command line options
-Specify a CSV file to log to: `-c log.csv` (File will be overwritten if it exists)    
-Enable support for Forza Horizon: `-z`    
-Enable JSON server: `-j`   
-Disable realtime terminal output: `-q`   
-Enable debug information: `-d`
+Run the application with `fdt` and providing the appropriate flags for desired behavior.
 
-&nbsp;
+**Command line options**
 
-##### Example (Forza Horizon)
-`fdt -z -j -c log.csv`  
-`fdt -z`  
+| Flag | Description | Extra |
+|------|-------------|-------|
+| `-c /path/to/log.csv` | Output to csv file | If exists, will be overwritten |
+| `-z`  | Enable Forza Horizon support ||
+| `-j`  | Enable JSON Server | JSON data available at [http://localhost:8080/forza](http://localhost:8080/forza) |
+| `-q`  | Disable realtime terminal output ||
+| `-d`  | Enable debug information  ||
 
-##### Example (Forza Motorsport)
+**Example for Forza Motorsport, outputting to CSV and enabling JSON server**
+
 `fdt -c -j log.csv`  
 
-&nbsp;
-
-### JSON Data
+#### JSON Data
 If the `-j` flag is provided, JSON data will be available at: http://localhost:8080/forza. Could be used to make a web dashboard interface or something similar. JSON Format is an array of objects containing the various Forza data types.  
 
 You can see a sample of the kind of data that will be returned [here](https://github.com/richstokes/Forza-data-tools/blob/master/dash/sample.json).  
 
 There is a basic example JavaScript dashboard (with rev limiter function) in the `/dash` directory.  
 
-&nbsp; 
+### Forza Configuration
 
-## Further reading
-- Forza data out format: https://forums.forzamotorsport.net/turn10_postsm926839_Forza-Motorsport-7--Data-Out--feature-details.aspx#post_926839
+From your game settings, navigate to the HUD options, enable the data out feature and set it to use the IP address of your computer. Port 9999.  
 
-- Forza Horizon 4 has some mystery data in the packet, waiting on info from the developers: https://forums.forzamotorsport.net/turn10_postsm1086012_Data-Output.aspx#post_1086012
+If playing Forza Motorsport, select the "car dash" format.
+
+More information and setup of this feature available [here](https://support.forzamotorsport.net/hc/en-us/articles/21742934024211-Forza-Motorsport-Data-Out-Documentation)
