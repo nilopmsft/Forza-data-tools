@@ -4,6 +4,8 @@ This tool is a fork of [https://github.com/richstokes/Forza-data-tools](https://
 
 The tool was built with [golang](https://golang.org/dl/) for collecting the UDP data provided by modern Forza games.
 
+[**Example Output**](./dash/sample.json)
+
 ## Features
 - Realtime telemetry output to Azure Event Hub and terminal  
 - Telemetry data logging to csv file  
